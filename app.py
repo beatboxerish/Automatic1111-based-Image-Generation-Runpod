@@ -2,7 +2,8 @@ from ldm.generate import Generate
 import numpy as np
 import base64
 from io import BytesIO
-from PIL import ImageDraw, Image, ImageOps, ImageFilter
+from PIL import ImageDraw, Image, ImageOps, ImageFilter, ImageChops
+import cv2
 
 # Init is ran on server startup
 # Load your model to GPU as a global variable here using the variable name "model"
@@ -106,27 +107,24 @@ def get_raw_generation(gr, prompt, image_with_alpha_transparency, init_image_mas
     return curr_image
 
 def get_mask_from_diff(img_diff):
-    # converting image with channel differences into a single differenced image
-    sum_of_channels = np.sum(np.array(img_diff), axis=-1)
-
-    full_new_arr = []
-    for i in sum_of_channels:
-        ith_row = []
-        for j in i:
-            if j > 0: 
-                ith_row.append(255)
-            else: 
-                ith_row.append(0)
-        full_new_arr.append(ith_row)
-
-    full_new_arr = np.array(full_new_arr)
-    full_new_arr = full_new_arr.astype('uint8')
-    new_mask = Image.fromarray(full_new_arr)
-    return new_mask
+    img = np.array(img_diff)
+    # Find contours and hierarchy in the image
+    contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    drawing = []
+    for i,c in enumerate(contours):
+        # fill all contours (don't know how right this is)
+        drawing.append(c)
+    ### thickness might be very problematic below
+    img = cv2.drawContours(img, drawing, -1, (255,255,255), thickness=1)
+    img = Image.fromarray(img)
+    return img
 
 def prepare_masks_differencing_main(original_image, bg, output_mask_address=None):
-    img_diff = Image.fromarray((np.array(original_image.convert("RGB")) - np.array(bg.convert("RGB"))))
-    diff_mask = get_mask_from_diff(img_diff)
+    diff = ImageChops.difference(original_image, bg)
+    # remove rough edges (might be very problematic)
+    diff_bw = diff.convert("L").point(lambda x: 0 if x<5 else x)
+    diff_bw = diff_bw.point(lambda x: 255 if x>0 else x) # binarize the difference mask
+    diff_mask = get_mask_from_diff(diff_bw)
     
     alpha_transparent_mask, final_bw_mask = get_masks(diff_mask)
     
@@ -179,7 +177,7 @@ def get_shadow(mask):
     
     # adjust the shadows position
     new_backdrop = Image.new("L", (shadow.width, shadow.height), color=255)
-    new_backdrop.paste(shadow, (10, 10))
+    new_backdrop.paste(shadow, (10, 20))
         
     return new_backdrop
 
