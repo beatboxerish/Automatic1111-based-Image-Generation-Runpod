@@ -169,7 +169,9 @@ def get_shadow(mask):
     mask = ImageOps.expand(mask, border=300, fill='black')
     
     # actual shadow creation
-    alpha_blur = mask.filter(ImageFilter.GaussianBlur(10))
+    alpha_blur = mask.filter(ImageFilter.GaussianBlur(
+        np.random.randint(3, 10)
+    ))
     shadow = ImageOps.invert(alpha_blur)
     
     # cropping to get position for the original image back
@@ -177,7 +179,7 @@ def get_shadow(mask):
     
     # adjust the shadows position
     new_backdrop = Image.new("L", (shadow.width, shadow.height), color=255)
-    new_backdrop.paste(shadow, (10, 20))
+    new_backdrop.paste(shadow, (np.random.randint(3, 11), np.random.randint(3, 11)))
         
     return new_backdrop
 
@@ -192,12 +194,13 @@ def add_shadow(original_image_mask, composite_image):
     composite_image_copy = composite_image.copy()
     # get product on shadow
     shadow_img.paste(composite_image_copy, (0,0), 
-                     original_image_mask.filter(ImageFilter.GaussianBlur(0)))
+                     original_image_mask.filter(ImageFilter.GaussianBlur(5)))
     # get above composite on background
     composite_image_copy.paste(shadow_img, (0,0), ImageOps.invert(shadow))
     # correct alpha channel
     composite_image_copy.putalpha(composite_image.getchannel("A"))
     return composite_image_copy
+
 
 def img_to_base64_str(img):
     buffered = BytesIO()
