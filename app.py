@@ -254,7 +254,7 @@ def download_file(client, path, bucket_name='fotomaker'):
     return None
 
 def save_response_s3(client, file, key):
-    in_mem_file = io.BytesIO()
+    in_mem_file = BytesIO()
     file.save(in_mem_file, format=file.format)
     in_mem_file.seek(0)
     
