@@ -4,6 +4,7 @@ import base64
 from io import BytesIO
 from PIL import ImageDraw, Image, ImageOps, ImageFilter, ImageChops
 import cv2
+import boto3
 
 # Init is ran on server startup
 # Load your model to GPU as a global variable here using the variable name "model"
@@ -27,11 +28,15 @@ def inference(model_inputs:dict) -> dict:
     # Parse out your arguments
     prompt = model_inputs.get("prompt")
     n_imgs = model_inputs.get("n_imgs")
-    resp_image = model_inputs.get("encoded_image")
+    composite_image = model_inputs.get("composite_image")
     bg_image = model_inputs.get('bg_image')
-
-    resp_image = api_to_img(resp_image)
-    bg_image = api_to_img(bg_image)
+    
+    composite_image, bg_image = load_images(
+        composite_image, 
+        bg_image, 
+        model_inputs["access_key"], 
+        model_inputs["secret_key"]
+        )
     image_with_alpha_transparency, final_bw_mask, original_image_mask = prepare_masks_differencing_main(resp_image,
                                                                                                         bg_image,
                                                                                                         None)
@@ -221,3 +226,20 @@ def api_to_img(img):
     respImage = BytesIO(respImage)
     respImage = Image.open(respImage)
     return respImage
+
+def load_images(composite_image, bg_image, access_key, secret_key):
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key, 
+        region_name="ap-south-1"
+    )
+    download_file(s3_client, "Composites/"+composite_image+".png")
+    download_file(s3_client, "Backgrounds/"+bg_image+".png")
+    composite_image, bg_image = Image.open(composite_image+".png"), Image.open(bg_image+".png")
+
+    return composite_image, bg_image
+
+def download_file(client, path, bucket_name='fotomaker'):
+    client.download_file(bucket_name, path, path.split("/")[-1])
+    return None

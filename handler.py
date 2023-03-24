@@ -15,10 +15,6 @@ def check_api_availability(host):
             print('something went wrong')
         time.sleep(200/1000)
 
-# check_api_availability("http://0.0.0.0:3000/hello/")
-
-print('Now Running Handler')
-
 def handler(event):
     '''
     This is the handler function that will be called by the serverless.
@@ -26,8 +22,10 @@ def handler(event):
     global model
     print("Got Event:", event)
 
-    # response = requests.post(url="http://0.0.0.0:3000/img2img", json=event["input"])
     model_inputs = event["input"]
+    model_inputs["access_key"] = event["s3Config"]["accessId"]
+    model_inputs["secret_key"] = event["s3Config"]["accessSecret"]
+
     response = inference(model_inputs)
 
     # return the output that you want to be returned like pre-signed URLs to output artifacts

@@ -8,7 +8,7 @@ SHELL ["/bin/bash", "-c"]
 WORKDIR /invokeai
 
 # RUN pip install -U xformers
-RUN pip install runpod
+RUN pip install runpod boto3
 
 ADD handler.py .
 ADD app.py .
