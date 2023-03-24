@@ -40,7 +40,7 @@ def inference(model_inputs:dict) -> dict:
     image_with_alpha_transparency, final_bw_mask, original_image_mask = prepare_masks_differencing_main(composite_image,
                                                                                                         bg_image,
                                                                                                         None)
-    img_urls = []
+    imgs = []
     for i in range(n_imgs):
         img = img2img_main(
             model,
@@ -49,16 +49,12 @@ def inference(model_inputs:dict) -> dict:
             final_bw_mask,
             original_image_mask
             )
-        # saving the image
-        key = f"GeneratedImages/{composite_image_name}_{i+1}.png"
-        save_response_s3(
-            client,
-            img,
-            key
-        )
-        url = create_presigned_url(client, key)
-        img_urls.append(url)
-    
+        imgs.append(img)
+
+    # saving the images
+    keys = save_images(composite_image_name, imgs, client)
+    img_urls = get_urls(client, keys)
+
     return {'generatedImages': img_urls}
 
 ###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---
@@ -252,13 +248,43 @@ def download_file(client, path, bucket_name='fotomaker'):
     client.download_file(bucket_name, path, path.split("/")[-1])
     return None
 
+def save_images(save_name, imgs, client):
+    path_exists, start_i = check_path_exists(client, save_name)
+    
+    keys = []
+    for idx, img in enumerate(imgs):
+        key = f"GeneratedImages/{save_name}/{start_i+idx}.png"
+        save_response_s3(
+            client,
+            img,
+            key
+            )
+        keys.append(key)
+    return keys
+
+def check_path_exists(client, folder_name):
+    count_objs = client.list_objects_v2(
+        Bucket='fotomaker',
+        Prefix="GeneratedImages/"+folder_name)['KeyCount']
+    if count_objs==0:
+        return False, 1
+    else:
+        return True, count_objs+1
+
 def save_response_s3(client, file, key):
     in_mem_file = BytesIO()
-    file.save(in_mem_file, format=file.format)
+    file.save(in_mem_file, format="PNG")
     in_mem_file.seek(0)
     
     client.upload_fileobj(in_mem_file, 'fotomaker', key)
     return None
+
+def get_urls(client, keys):
+    img_urls = []
+    for key in keys:
+        url = create_presigned_url(client, key)
+        img_urls.append(url)
+    return img_urls
 
 def create_presigned_url(client, key, expiration=60*5):
     # Generate a presigned URL for the S3 object
