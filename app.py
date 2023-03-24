@@ -246,7 +246,6 @@ def load_images(composite_image, bg_image, access_key, secret_key):
     download_file(s3_client, "Composites/"+composite_image+".png")
     download_file(s3_client, "Backgrounds/"+bg_image+".png")
     composite_image, bg_image = Image.open(composite_image+".png"), Image.open(bg_image+".png")
-
     return s3_client, composite_image, bg_image
 
 def download_file(client, path, bucket_name='fotomaker'):
