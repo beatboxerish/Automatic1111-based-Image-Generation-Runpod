@@ -37,7 +37,7 @@ def inference(model_inputs:dict) -> dict:
         model_inputs["access_key"], 
         model_inputs["secret_key"]
         )
-    image_with_alpha_transparency, final_bw_mask, original_image_mask = prepare_masks_differencing_main(resp_image,
+    image_with_alpha_transparency, final_bw_mask, original_image_mask = prepare_masks_differencing_main(composite_image,
                                                                                                         bg_image,
                                                                                                         None)
     img_list = []
