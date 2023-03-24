@@ -28,30 +28,38 @@ def inference(model_inputs:dict) -> dict:
     # Parse out your arguments
     prompt = model_inputs.get("prompt")
     n_imgs = model_inputs.get("n_imgs")
-    composite_image = model_inputs.get("composite_image")
-    bg_image = model_inputs.get('bg_image')
+    composite_image_name = model_inputs.get("composite_image")
+    bg_image_name = model_inputs.get('bg_image')
     
-    composite_image, bg_image = load_images(
-        composite_image, 
-        bg_image, 
+    client, composite_image, bg_image = load_images(
+        composite_image_name, 
+        bg_image_name, 
         model_inputs["access_key"], 
         model_inputs["secret_key"]
         )
     image_with_alpha_transparency, final_bw_mask, original_image_mask = prepare_masks_differencing_main(composite_image,
                                                                                                         bg_image,
                                                                                                         None)
-    img_list = []
+    img_urls = []
     for i in range(n_imgs):
         img = img2img_main(
             model,
             prompt,
             image_with_alpha_transparency,
-            final_bw_mask, 
+            final_bw_mask,
             original_image_mask
             )
-        img_list.append(img_to_base64_str(img))
+        # saving the image
+        key = f"GeneratedImages/{composite_image_name}_{i+1}.png"
+        save_response_s3(
+            client,
+            img,
+            key
+        )
+        url = create_presigned_url(client, key)
+        img_urls.append(url)
     
-    return {'generatedImages': img_list}
+    return {'generatedImages': img_urls}
 
 ###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---
 ### util functions
@@ -206,7 +214,6 @@ def add_shadow(original_image_mask, composite_image):
     composite_image_copy.putalpha(composite_image.getchannel("A"))
     return composite_image_copy
 
-
 def img_to_base64_str(img):
     buffered = BytesIO()
     img.save(buffered, format="PNG")
@@ -227,6 +234,8 @@ def api_to_img(img):
     respImage = Image.open(respImage)
     return respImage
 
+# S3 Utils
+
 def load_images(composite_image, bg_image, access_key, secret_key):
     s3_client = boto3.client(
         's3',
@@ -238,8 +247,24 @@ def load_images(composite_image, bg_image, access_key, secret_key):
     download_file(s3_client, "Backgrounds/"+bg_image+".png")
     composite_image, bg_image = Image.open(composite_image+".png"), Image.open(bg_image+".png")
 
-    return composite_image, bg_image
+    return s3_client, composite_image, bg_image
 
 def download_file(client, path, bucket_name='fotomaker'):
     client.download_file(bucket_name, path, path.split("/")[-1])
     return None
+
+def save_response_s3(client, file, key):
+    in_mem_file = io.BytesIO()
+    file.save(in_mem_file, format=file.format)
+    in_mem_file.seek(0)
+    
+    client.upload_fileobj(in_mem_file, 'fotomaker', key)
+    return None
+
+def create_presigned_url(client, key, expiration=60*5):
+    # Generate a presigned URL for the S3 object
+    response = client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': 'fotomaker','Key': key},
+        ExpiresIn=expiration)
+    return response
