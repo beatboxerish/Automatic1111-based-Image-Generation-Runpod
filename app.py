@@ -1,4 +1,5 @@
 from ldm.generate import Generate
+from ldm.invoke.restoration.realesrgan import ESRGAN
 import numpy as np
 import base64
 from io import BytesIO
@@ -51,6 +52,9 @@ def inference(model_inputs:dict) -> dict:
             )
         imgs.append(img)
 
+    # upscaling the images
+    imgs = upscale_images(imgs)
+    
     # saving the images
     keys = save_images(composite_image_name, imgs, client)
     img_urls = get_urls(client, keys)
@@ -229,6 +233,21 @@ def api_to_img(img):
     respImage = BytesIO(respImage)
     respImage = Image.open(respImage)
     return respImage
+
+# Upscaling Utils
+
+def upscale_images(img_list):
+    final_images = []
+    upscaler = ESRGAN()
+    for img in img_list:
+        final_images.append(upscale_image(upscaler, img))
+
+    return final_images
+
+def upscale_image(upscaler, img):
+    output_img = upscaler.process(img, 0.6, 0, 2)
+    return output_img
+
 
 # S3 Utils
 
