@@ -6,6 +6,7 @@ from io import BytesIO
 from PIL import ImageDraw, Image, ImageOps, ImageFilter, ImageChops
 import cv2
 import boto3
+from blend_modes import multiply
 
 # Init is ran on server startup
 # Load your model to GPU as a global variable here using the variable name "model"
@@ -174,45 +175,60 @@ def get_masks(diff_mask):
     
     return alpha_transparent_mask, final_bw_mask
 
-def get_shadow(mask):
-    """
-    Create shadow layer using give mask
-    """
-    # expanding the image to avoid blackening of pixels at the edges
-    mask = ImageOps.expand(mask, border=300, fill='black')
-    
-    # actual shadow creation
-    alpha_blur = mask.filter(ImageFilter.GaussianBlur(
-        np.random.randint(3, 10)
-    ))
-    shadow = ImageOps.invert(alpha_blur)
-    
-    # cropping to get position for the original image back
-    shadow = ImageOps.crop(shadow, 300)
-    
-    # adjust the shadows position
-    new_backdrop = Image.new("L", (shadow.width, shadow.height), color=255)
-    new_backdrop.paste(shadow, (np.random.randint(3, 11), np.random.randint(3, 11)))
-        
-    return new_backdrop
-
 def add_shadow(original_image_mask, composite_image):
     """
     Add shadow to the composite image.
     """
     # create shadow image
     shadow = get_shadow(original_image_mask)
-    shadow_img = shadow.convert("RGB")
+
+    # get only shadow portion that isn't covering the original product
+    kernel = np.ones((3, 3), np.uint8)
+    erosion = cv.erode(np.array(original_image_mask),
+                       kernel,
+                       iterations = 3)
+    original_image_mask_inner = Image.fromarray(erosion).filter(ImageFilter.GaussianBlur(10))
+    shadow.paste(original_image_mask_inner, mask=original_image_mask_inner)
     
-    composite_image_copy = composite_image.copy()
-    # get product on shadow
-    shadow_img.paste(composite_image_copy, (0,0), 
-                     original_image_mask.filter(ImageFilter.GaussianBlur(5)))
-    # get above composite on background
-    composite_image_copy.paste(shadow_img, (0,0), ImageOps.invert(shadow))
-    # correct alpha channel
-    composite_image_copy.putalpha(composite_image.getchannel("A"))
-    return composite_image_copy
+    # blend the image with the shadow
+    new_composite_image = composite_image.copy()
+    new_composite_image.putalpha(Image.new("L", (composite_image.size[0], composite_image.size[1]), 255))
+    background_img_float = np.array(new_composite_image).astype(float)
+    foreground_img_float = np.array(shadow).astype(float)
+
+    blended_img_float = multiply(background_img_float, foreground_img_float, 0.5)
+
+    blended_img = np.uint8(blended_img_float)
+    blended_img_raw = Image.fromarray(blended_img)
+    
+    return blended_img_raw
+
+def get_shadow(mask):
+    """
+    Create shadow layer using give mask
+    """
+    # expanding the image to avoid blackening of pixels at the edges
+    shadow = ImageOps.expand(mask, border=300, fill='black')
+    
+    # actual shadow creation
+    alpha_blur = shadow.filter(ImageFilter.GaussianBlur(
+        np.random.randint(3,8)
+    ))
+    shadow = ImageOps.invert(alpha_blur)
+    
+    # cropping to get position for the original image back
+    shadow = ImageOps.crop(shadow, 300)
+    
+    # adjust the shadows position by pasting it with an offset on a new image
+    offset = np.random.randint(3, 8), np.random.randint(3, 8)
+    new_backdrop = Image.new("RGB", (shadow.width, shadow.height), color=(255, 255, 255))
+    new_backdrop.paste(shadow, offset)
+    
+    # # create mask for shadow
+    new_mask = Image.new("L", (shadow.width, shadow.height), color=255)
+    new_backdrop.putalpha(new_mask)
+        
+    return new_backdrop
 
 def img_to_base64_str(img):
     buffered = BytesIO()
@@ -234,22 +250,7 @@ def api_to_img(img):
     respImage = Image.open(respImage)
     return respImage
 
-# Upscaling Utils
-
-def upscale_images(img_list):
-    final_images = []
-    upscaler = ESRGAN()
-    for img in img_list:
-        final_images.append(upscale_image(upscaler, img))
-
-    return final_images
-
-def upscale_image(upscaler, img):
-    output_img = upscaler.process(img, 0.6, 0, 2)
-    return output_img
-
-
-# S3 Utils
+# S3 Utils ------------------------------------
 
 def load_images(composite_image, bg_image, access_key, secret_key):
     s3_client = boto3.client(
@@ -312,3 +313,24 @@ def create_presigned_url(client, key, expiration=60*5):
         Params={'Bucket': 'fotomaker','Key': key},
         ExpiresIn=expiration)
     return response
+
+# Upscaling Utils ------------------------------------
+
+def upscale_images(img_list):
+    """
+    Upscale all the images in the above list of images
+    """
+    final_images = []
+    upscaler = ESRGAN()
+    for img in img_list:
+        final_images.append(upscale_image(upscaler, img))
+
+    return final_images
+
+def upscale_image(upscaler, img):
+    """
+    Upscale a single image given the upscaler and image
+    """
+    output_img = upscaler.process(img, 0.6, 0, 2)
+    return output_img
+
