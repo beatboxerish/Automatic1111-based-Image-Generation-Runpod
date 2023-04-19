@@ -184,7 +184,7 @@ def add_shadow(original_image_mask, composite_image):
 
     # get only shadow portion that isn't covering the original product
     kernel = np.ones((3, 3), np.uint8)
-    erosion = cv.erode(np.array(original_image_mask),
+    erosion = cv2.erode(np.array(original_image_mask),
                        kernel,
                        iterations = 3)
     original_image_mask_inner = Image.fromarray(erosion).filter(ImageFilter.GaussianBlur(10))
