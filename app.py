@@ -42,6 +42,7 @@ def inference(model_inputs:dict) -> dict:
     image_with_alpha_transparency, final_bw_mask, original_image_mask = prepare_masks_differencing_main(composite_image,
                                                                                                         bg_image,
                                                                                                         None)
+    original_image_mask_copy = clean_noise(original_image_mask)
     imgs = []
     for i in range(n_imgs):
         img = img2img_main(
@@ -64,6 +65,13 @@ def inference(model_inputs:dict) -> dict:
 
 ###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---
 ### util functions
+
+def clean_noise(img):
+    array_img = np.array(img.copy())
+    kernel = np.ones((3, 3), np.uint8)
+    noise_reduction = cv2.morphologyEx(array_img, cv2.MORPH_CLOSE, kernel)
+    noise_reduction = cv2.morphologyEx(noise_reduction, cv2.MORPH_OPEN, kernel)
+    return Image.fromarray(noise_reduction)
 
 def img2img_main(
     model,
