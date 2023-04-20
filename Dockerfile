@@ -12,6 +12,10 @@ RUN pip install runpod boto3 blend-modes
 
 ADD handler.py .
 ADD app.py .
+ADD s3_utils.py .
+ADD upscaling_utils.py .
+ADD preprocessing_utils.py .
+
 
 ADD start.sh .
 RUN chmod +x ./start.sh
