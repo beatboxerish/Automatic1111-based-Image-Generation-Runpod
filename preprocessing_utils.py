@@ -14,6 +14,14 @@ def clean_noise(img):
     noise_reduction = cv2.morphologyEx(noise_reduction, cv2.MORPH_OPEN, kernel)
     return Image.fromarray(noise_reduction)
 
+def dilate_image(img, iterations):
+    array_img = np.array(img.copy())
+    kernel = np.ones((3, 3), np.uint8)
+    dilated_img = cv2.dilate(array_img,
+                             kernel,
+                             iterations = iterations)
+    return Image.fromarray(dilated_img)
+
 def get_mask_from_diff(img_diff):
     img = np.array(img_diff)
     # Find contours and hierarchy in the image
@@ -69,35 +77,7 @@ def get_masks(diff_mask):
     
     return alpha_transparent_mask, final_bw_mask
 
-def add_shadow(original_image_mask, composite_image):
-    """
-    Add shadow to the composite image.
-    """
-    # create shadow image
-    shadow = get_shadow(original_image_mask)
-
-    # get only shadow portion that isn't covering the original product
-    kernel = np.ones((3, 3), np.uint8)
-    erosion = cv2.erode(np.array(original_image_mask),
-                       kernel,
-                       iterations = 3)
-    original_image_mask_inner = Image.fromarray(erosion).filter(ImageFilter.GaussianBlur(10))
-    shadow.paste(original_image_mask_inner, mask=original_image_mask_inner)
-    
-    # blend the image with the shadow
-    new_composite_image = composite_image.copy()
-    new_composite_image.putalpha(Image.new("L", (composite_image.size[0], composite_image.size[1]), 255))
-    background_img_float = np.array(new_composite_image).astype(float)
-    foreground_img_float = np.array(shadow).astype(float)
-
-    blended_img_float = multiply(background_img_float, foreground_img_float, 0.5)
-
-    blended_img = np.uint8(blended_img_float)
-    blended_img_raw = Image.fromarray(blended_img)
-    
-    return blended_img_raw
-
-def get_shadow(mask):
+def get_shadow(mask, offset):
     """
     Create shadow layer using give mask
     """
@@ -105,8 +85,10 @@ def get_shadow(mask):
     shadow = ImageOps.expand(mask, border=300, fill='black')
     
     # actual shadow creation
+    if offset=='no_offset':
+        shadow = dilate_image(shadow, 3)
     alpha_blur = shadow.filter(ImageFilter.GaussianBlur(
-        np.random.randint(3,8)
+        np.random.randint(3, 10)
     ))
     shadow = ImageOps.invert(alpha_blur)
     
@@ -114,7 +96,10 @@ def get_shadow(mask):
     shadow = ImageOps.crop(shadow, 300)
     
     # adjust the shadows position by pasting it with an offset on a new image
-    offset = np.random.randint(3, 8), np.random.randint(3, 8)
+    if offset == 'no_offset':
+        offset = 0,0
+    else:
+        offset = np.random.randint(3, 8), np.random.randint(3, 8)
     new_backdrop = Image.new("RGB", (shadow.width, shadow.height), color=(255, 255, 255))
     new_backdrop.paste(shadow, offset)
     
@@ -123,6 +108,49 @@ def get_shadow(mask):
     new_backdrop.putalpha(new_mask)
         
     return new_backdrop
+
+def add_shadow(original_image_mask, composite_image, offset="random"):
+    """
+    Add shadow to the composite image.
+    """
+    original_alpha_channel = composite_image.getchannel("A").copy()
+    
+    # create shadow image
+    shadow = get_shadow(original_image_mask, offset)
+
+    # get only shadow portion that isn't covering the original product
+    if offset=='random':
+        kernel = np.ones((3, 3), np.uint8)
+        erosion = cv2.erode(np.array(original_image_mask),
+                           kernel,
+                           iterations = 3)
+        original_image_mask_inner = Image.fromarray(erosion).filter(ImageFilter.GaussianBlur(10))
+        shadow.paste(original_image_mask_inner, mask=original_image_mask_inner)
+    elif offset=='no_offset':
+        # get only shadow portion that isn't covering the original product
+        original_image_mask_inner = original_image_mask.filter(ImageFilter.GaussianBlur(2))
+        shadow.paste(original_image_mask_inner, mask=original_image_mask_inner)
+        shadow = shadow.filter(ImageFilter.GaussianBlur(5))
+    
+    # blend the image with the shadow
+    new_composite_image = composite_image.copy()
+    new_composite_image.putalpha(Image.new("L", (composite_image.size[0], composite_image.size[1]), 255))
+    background_img_float = np.array(new_composite_image).astype(float)
+    foreground_img_float = np.array(shadow).astype(float)
+    
+    if offset=='no_offset':
+        blended_img_float = multiply(background_img_float, foreground_img_float, 0.5)
+    else:
+        blended_img_float = multiply(background_img_float, foreground_img_float, 0.5)
+
+    blended_img = np.uint8(blended_img_float)
+    blended_img_raw = Image.fromarray(blended_img)
+    
+    ## do we use the below or not? is it helping us in any way?
+    # blended_img_raw.putalpha(original_alpha_channel)
+    
+    return blended_img_raw
+
 
 ### ROUGH
 

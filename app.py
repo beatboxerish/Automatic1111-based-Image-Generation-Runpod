@@ -74,7 +74,9 @@ def img2img_main(
     Main function for performing img2img with masks in the manner
     we want to process our images.
     """
-    image_with_alpha_transparency = add_shadow(original_image_mask, image_with_alpha_transparency)
+    image_with_alpha_transparency = add_shadow(original_image_mask,
+     image_with_alpha_transparency,
+     'no_offset')
     final_image = get_raw_generation(model, prompt, image_with_alpha_transparency,
                                      original_image_mask.filter(ImageFilter.GaussianBlur(5)), 0, 0)
     final_image = final_image.convert("RGB")
