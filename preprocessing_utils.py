@@ -22,6 +22,14 @@ def dilate_image(img, iterations):
                              iterations = iterations)
     return Image.fromarray(dilated_img)
 
+def erode_image(img, iterations):
+    array_img = np.array(img.copy())
+    kernel = np.ones((3, 3), np.uint8)
+    eroded_img = cv2.erode(array_img,
+                           kernel,
+                           iterations = iterations)
+    return Image.fromarray(eroded_img)
+    
 def get_mask_from_diff(img_diff):
     img = np.array(img_diff)
     # Find contours and hierarchy in the image

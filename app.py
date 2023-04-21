@@ -47,7 +47,7 @@ def inference(model_inputs:dict) -> dict:
             prompt,
             image_with_alpha_transparency,
             final_bw_mask,
-            original_image_mask_copy
+            original_image_mask
             )
         imgs.append(img)
 
