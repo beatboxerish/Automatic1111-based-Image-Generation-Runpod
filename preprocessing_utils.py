@@ -51,6 +51,9 @@ def prepare_masks_differencing_main(original_image, bg, output_mask_address=None
     final_bw_mask = final_bw_mask.resize((512, 512))
     final_image_with_alpha_transparency = final_image_with_alpha_transparency.resize((512, 512))
 
+    # cleaning
+    diff_mask = clean_noise(diff_mask)
+
     return final_image_with_alpha_transparency, final_bw_mask, diff_mask
 
 def get_masks(diff_mask): 
