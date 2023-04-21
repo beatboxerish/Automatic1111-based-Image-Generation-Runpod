@@ -20,7 +20,7 @@ def init():
     # do the slow model initialization
     model.load_model()
 
-# Inference is ran for every server call
+# Inference is run for every server call
 # Reference your preloaded global model variable here.
 def inference(model_inputs:dict) -> dict:
     global model
@@ -40,6 +40,9 @@ def inference(model_inputs:dict) -> dict:
     image_with_alpha_transparency, final_bw_mask, original_image_mask = prepare_masks_differencing_main(composite_image,
                                                                                                         bg_image,
                                                                                                         None)
+    alpha_mask = image_with_alpha_transparency.getchannel('A')
+    faded_mask = get_faded_black_image(original_image_mask)
+
     imgs = []
     for i in range(n_imgs):
         img = img2img_main(
@@ -47,7 +50,8 @@ def inference(model_inputs:dict) -> dict:
             prompt,
             image_with_alpha_transparency,
             final_bw_mask,
-            original_image_mask
+            original_image_mask,
+            faded_mask
             )
         imgs.append(img)
 
@@ -68,23 +72,32 @@ def img2img_main(
     prompt,
     image_with_alpha_transparency,
     final_bw_mask, 
-    original_image_mask):
+    original_image_mask,
+    faded_mask):
     """
     Main function for performing img2img with masks in the manner
     we want to process our images.
     """
-    image_with_alpha_transparency = add_shadow(original_image_mask,
-     image_with_alpha_transparency,
-     'no_offset')
-    final_image = get_raw_generation(model, prompt, image_with_alpha_transparency,
-                                     original_image_mask.filter(ImageFilter.GaussianBlur(5)), 0, 0)
+    image_with_alpha_transparency = add_shadow(
+        original_image_mask,
+        image_with_alpha_transparency,
+        'no_offset'
+        )
+    final_image = get_raw_generation(
+        model, 
+        prompt,
+        image_with_alpha_transparency,
+        faded_mask, 
+        0, 
+        0
+        )
     final_image = final_image.convert("RGB")
     return final_image
 
 def get_raw_generation(gr, prompt, image_with_alpha_transparency, init_image_mask, ss=0, sb=0):
-    n = 5
+    n = 3
     init_strength = 0.65
-    init_seam_strength = 0.5
+    init_seam_strength = 0
     curr_image = None
 
     alpha_mask = image_with_alpha_transparency.getchannel('A')

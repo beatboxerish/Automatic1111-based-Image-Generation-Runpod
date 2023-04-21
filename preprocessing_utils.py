@@ -7,6 +7,16 @@ from blend_modes import multiply
 from PIL import ImageDraw, Image, ImageOps, ImageFilter, ImageChops
 
 
+def get_faded_black_image(black_image):
+    black_image = black_image.copy()
+    array_img = np.array(black_image)
+    kernel = np.ones((15, 15), np.uint8)
+    gradient = cv2.morphologyEx(array_img, cv2.MORPH_GRADIENT, kernel)
+    black_image_1 = Image.fromarray(gradient)
+    black_image_1 = black_image_1.point(lambda x: x-150)    
+    black_image.paste(black_image_1, mask=black_image_1)
+    return black_image.filter(ImageFilter.GaussianBlur(1))
+
 def clean_noise(img):
     array_img = np.array(img.copy())
     kernel = np.ones((3, 3), np.uint8)
@@ -30,38 +40,31 @@ def erode_image(img, iterations):
                            iterations = iterations)
     return Image.fromarray(eroded_img)
     
-def get_mask_from_diff(img_diff):
-    img = np.array(img_diff)
-    # Find contours and hierarchy in the image
-    contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    drawing = []
-    for i,c in enumerate(contours):
-        # fill all contours (don't know how right this is)
-        drawing.append(c)
-    ### thickness might be very problematic below
-    img = cv2.drawContours(img, drawing, -1, (255,255,255), thickness=1)
-    img = Image.fromarray(img)
-    return img
-
 def prepare_masks_differencing_main(original_image, bg, output_mask_address=None):
     diff = ImageChops.difference(original_image, bg)
-    # remove rough edges (might be very problematic)
-    diff_bw = diff.convert("L").point(lambda x: 0 if x<5 else x)
-    diff_bw = diff_bw.point(lambda x: 255 if x>0 else x) # binarize the difference mask
-    diff_mask = get_mask_from_diff(diff_bw)
     
+    # remove rough edges (might be very problematic)
+    # some rough edges seem to appear just when we are differencing the images
+    # the outer boundary will have points that don't indicate the image
+    # keep the below thresholding at a number > 0 reduces the outer edges which get
+    # included in the mask but aren't indicative of the product
+    diff_bw = diff.convert("L").point(lambda x: 0 if x==0 else 255)
+    diff_bw = erode_image(diff_bw, 1)
+
+    # clean up image
+    diff_mask = clean_noise(diff_bw)
+    
+    # get other masks
     alpha_transparent_mask, final_bw_mask = get_masks(diff_mask)
     
+    # create final image
     final_image_with_alpha_transparency = original_image.copy()
     final_image_with_alpha_transparency.putalpha(alpha_transparent_mask)
 
     # resizing
     final_bw_mask = final_bw_mask.resize((512, 512))
     final_image_with_alpha_transparency = final_image_with_alpha_transparency.resize((512, 512))
-
-    # cleaning
-    diff_mask = clean_noise(diff_mask)
-
+    
     return final_image_with_alpha_transparency, final_bw_mask, diff_mask
 
 def get_masks(diff_mask): 
