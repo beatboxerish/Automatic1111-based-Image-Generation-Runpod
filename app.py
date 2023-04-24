@@ -12,8 +12,8 @@ def init():
     global model
     # Create an object with default values
     model = Generate(
-        model='stable-diffusion-1.5',
-        conf='/workspace/configs/models.yaml.example',
+        model='analog-diffusion-1.0',
+        conf='/invokeai/configs/models.yaml.example',
         sampler_name ='ddim'
         )
 
