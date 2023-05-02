@@ -2,6 +2,7 @@ from ldm.generate import Generate
 import numpy as np
 from PIL import ImageFilter
 import cv2
+import os
 from preprocessing_utils import *
 from s3_utils import *
 from upscaling_utils import *
@@ -26,17 +27,16 @@ def inference(model_inputs:dict) -> dict:
     global model
 
     # Parse out your arguments
-    prompt = model_inputs.get("prompt")
+    prompt = model_inputs.get("imageDescription")
     n_imgs = model_inputs.get("n_imgs")
-    composite_image_name = model_inputs.get("composite_image")
-    bg_image_name = model_inputs.get('bg_image')
-    
-    client, composite_image, bg_image = load_images(
-        composite_image_name,
-        bg_image_name,
-        model_inputs["access_key"],
-        model_inputs["secret_key"]
-        )
+    composite_image_url = model_inputs.get("mockupUrl")
+    bg_image_url = model_inputs.get("backgroundUrl")
+    product_id = model_inputs.get("productID")
+    composite_id = model_inputs.get("mockupId")
+
+    composite_image = load_image_from_url(composite_image_url)
+    bg_image = load_image_from_url(bg_image_url)
+
     image_with_alpha_transparency, final_bw_mask, original_image_mask = prepare_masks_differencing_main(composite_image,
                                                                                                         bg_image,
                                                                                                         None)
@@ -51,16 +51,30 @@ def inference(model_inputs:dict) -> dict:
             image_with_alpha_transparency,
             final_bw_mask,
             original_image_mask,
-            faded_mask
+            faded_mask,
+            alpha_mask
             )
         imgs.append(img)
 
-    # upscaling the images
-    imgs = upscale_images(imgs)
-    
+    # upscaling the images (disabled upscaling for now)
+    # imgs = upscale_images(imgs)
+
     # saving the images
-    keys = save_images(composite_image_name, imgs, client)
-    img_urls = get_urls(client, keys)
+    client = create_s3_client(os.environ["ACCESS"], os.environ["SECRET"])
+    keys = save_images(composite_id, imgs, client)
+    
+    if os.environ["ENV"]=="devo": 
+        ## for devo (for testing purposes)
+        img_urls = get_urls(client, keys)
+    else:
+        ## for prod
+        img_urls = []
+        # trigger BE API
+        send_info_back_to_BE(
+            product_id,
+            composite_id, 
+            keys
+        )
 
     return {'generatedImages': img_urls}
 
@@ -73,7 +87,8 @@ def img2img_main(
     image_with_alpha_transparency,
     final_bw_mask, 
     original_image_mask,
-    faded_mask):
+    faded_mask,
+    alpha_mask):
     """
     Main function for performing img2img with masks in the manner
     we want to process our images.
@@ -81,23 +96,24 @@ def img2img_main(
     image_with_alpha_transparency = add_shadow(
         original_image_mask,
         image_with_alpha_transparency,
-        'no_offset'
+        'random'
         )
+    image_with_alpha_transparency.putalpha(alpha_mask)
     final_image = get_raw_generation(
         model, 
         prompt,
         image_with_alpha_transparency,
         faded_mask, 
-        0, 
+        18, 
         0
         )
     final_image = final_image.convert("RGB")
     return final_image
 
 def get_raw_generation(gr, prompt, image_with_alpha_transparency, init_image_mask, ss=0, sb=0):
-    n = 3
-    init_strength = 0.65
-    init_seam_strength = 0
+    n = 1
+    init_strength = 0.55
+    init_seam_strength = 0.15
     curr_image = None
 
     alpha_mask = image_with_alpha_transparency.getchannel('A')
@@ -119,16 +135,26 @@ def get_raw_generation(gr, prompt, image_with_alpha_transparency, init_image_mas
             init_img = curr_image,
             init_mask = init_image_mask,
             strength = curr_strength,
-            cfg_scale = 8.5,
+            cfg_scale = 7.5,
             iterations = 1,
             seed=None,
             mask_blur_radius=0,
             seam_size= ss, 
             seam_blur= sb,
             seam_strength = curr_seam_strength,
-            seam_steps= 50,
+            seam_steps= 15,
         )
 
         curr_image = results[0][0]
         
     return curr_image
+
+def send_info_back_to_BE(product_id, composite_id, keys):
+    body = {
+    "productId": product_id,
+    "preprocessedImageKey": preprocessed_image_path,
+    "CroppedImageKey": cropped_image_path
+    }
+    endpoint = ""
+    requests.post()
+    return None

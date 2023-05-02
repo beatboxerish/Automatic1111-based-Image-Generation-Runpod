@@ -67,23 +67,25 @@ def prepare_masks_differencing_main(original_image, bg, output_mask_address=None
     
     return final_image_with_alpha_transparency, final_bw_mask, diff_mask
 
-def get_masks(diff_mask): 
-    # expand the current mask
-    bloated_mask = diff_mask.filter(ImageFilter.GaussianBlur(5))
-    bloated_mask = bloated_mask.point(
+def get_masks(diff_mask):
+    # binarize the current diff
+    bloated_mask = diff_mask.point(
         lambda x: 255 if x!=0 else 0
     )
+
+    # bloat it
+    bloated_mask = cv2.dilate(np.array(bloated_mask), 
+                                        np.ones((3, 3), np.uint8), 
+                                        iterations=int(20/2))
+    bloated_mask = Image.fromarray(bloated_mask)
     
     # create alpha transparent mask
     alpha_transparency = 0.9
     new_mask = bloated_mask.point(
         lambda x: int(x+alpha_transparency*255)
         )
-    
-    # blur the new mask
-    new_mask = new_mask.filter(ImageFilter.GaussianBlur(5))
-    
-    # preserve the product details
+        
+    # preserve the product details (not needed rn though)
     new_mask.paste(diff_mask, (0,0), diff_mask)
     
     alpha_transparent_mask = new_mask
@@ -153,9 +155,9 @@ def add_shadow(original_image_mask, composite_image, offset="random"):
     foreground_img_float = np.array(shadow).astype(float)
     
     if offset=='no_offset':
-        blended_img_float = multiply(background_img_float, foreground_img_float, 0.5)
+        blended_img_float = multiply(background_img_float, foreground_img_float, 0.2)
     else:
-        blended_img_float = multiply(background_img_float, foreground_img_float, 0.5)
+        blended_img_float = multiply(background_img_float, foreground_img_float, 0.25)
 
     blended_img = np.uint8(blended_img_float)
     blended_img_raw = Image.fromarray(blended_img)

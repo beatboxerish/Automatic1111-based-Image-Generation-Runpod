@@ -1,19 +1,36 @@
 import boto3
 from PIL import Image
 from io import BytesIO
+import requests
 
 
-def load_images(composite_image, bg_image, access_key, secret_key):
-    s3_client = boto3.client(
+def load_image_from_url(url):
+    # send a GET request to the URL and read the image contents into memory
+    response = requests.get(url)
+    image_bytes = BytesIO(response.content)
+    pil_image = Image.open(image_bytes)
+    return pil_image
+
+def create_s3_client(access_key, secret_key):
+  s3_client = boto3.client(
         's3',
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key, 
         region_name="ap-south-1"
     )
-    download_file(s3_client, "Composites/"+composite_image+".png")
-    download_file(s3_client, "Backgrounds/"+bg_image+".png")
-    composite_image, bg_image = Image.open(composite_image+".png"), Image.open(bg_image+".png")
-    return s3_client, composite_image, bg_image
+  return s3_client
+
+# def load_images(composite_image, bg_image, access_key, secret_key):
+#     s3_client = boto3.client(
+#         's3',
+#         aws_access_key_id=access_key,
+#         aws_secret_access_key=secret_key, 
+#         region_name="ap-south-1"
+#     )
+#     download_file(s3_client, "Composites/"+composite_image+".png")
+#     download_file(s3_client, "Backgrounds/"+bg_image+".png")
+#     composite_image, bg_image = Image.open(composite_image+".png"), Image.open(bg_image+".png")
+#     return s3_client, composite_image, bg_image
 
 def download_file(client, path, bucket_name='fotomaker'):
     client.download_file(bucket_name, path, path.split("/")[-1])
