@@ -5,6 +5,7 @@
 # model requires a model config file, a weights file,
 # and the width and height of the images it
 # was trained on.
+
 analog-diffusion-1.0:
   description: Analog diffusion model from HF
   weights: models/ldm/analog-diffusion-1.0.ckpt

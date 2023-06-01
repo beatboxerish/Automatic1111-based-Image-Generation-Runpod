@@ -20,11 +20,8 @@ def handler(event):
     This is the handler function that will be called by the serverless.
     '''
     global model
-    print("Got Event:", event)
-
-    model_inputs = event["input"]
-    
-    response = inference(model_inputs)
+    print("Got Event:", event)    
+    response = inference(event)
 
     # return the output that you want to be returned like pre-signed URLs to output artifacts
     return response

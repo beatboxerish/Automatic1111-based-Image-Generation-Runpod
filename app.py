@@ -27,13 +27,35 @@ def inference(model_inputs:dict) -> dict:
     global model
 
     # Parse out your arguments
-    prompt = model_inputs.get("imageDescription")
-    n_imgs = model_inputs.get("n_imgs")
-    composite_image_url = model_inputs.get("mockupUrl")
-    bg_image_url = model_inputs.get("backgroundUrl")
-    product_id = model_inputs.get("productID")
-    composite_id = model_inputs.get("mockupId")
+    model_inputs = model_inputs["input"]
 
+    prompt_information = model_inputs.get("prompts")
+    product_specific = model_inputs.get("productDescription")
+    product_id = model_inputs.get("productId")
+    background_id = model_inputs.get("backgroundId")
+    composite_id = model_inputs.get("compositeProductId")
+
+    n_imgs = model_inputs.get("nImages")
+    composite_image_url = model_inputs.get("compositeProductUrl")
+    bg_image_url = model_inputs.get("backgroundUrl")
+    
+    # build out prompt
+    image_specific_prompt = prompt_information["image_specific_prompt"]
+    bg_prompt = prompt_information["background_prompt"]
+    extra_info_prompt = prompt_information["extra_info_prompt"]
+
+    initial_prompt = ",".join([product_specific, image_specific_prompt, extra_info_prompt, bg_prompt])
+
+    img_urls = main(composite_image_url, bg_image_url, n_imgs, model, initial_prompt, product_id, 
+        background_id, composite_id)
+
+    return {'generatedImages': img_urls}
+
+###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---
+### util functions
+
+def main(composite_image_url, bg_image_url, n_imgs, model, initial_prompt, product_id, 
+    background_id, composite_id):
     composite_image = load_image_from_url(composite_image_url)
     bg_image = load_image_from_url(bg_image_url)
 
@@ -47,7 +69,7 @@ def inference(model_inputs:dict) -> dict:
     for i in range(n_imgs):
         img = img2img_main(
             model,
-            prompt,
+            initial_prompt,
             image_with_alpha_transparency,
             final_bw_mask,
             original_image_mask,
@@ -63,23 +85,17 @@ def inference(model_inputs:dict) -> dict:
     client = create_s3_client(os.environ["ACCESS"], os.environ["SECRET"])
     keys = save_images(composite_id, imgs, client)
     
-    if os.environ["ENV"]=="devo": 
-        ## for devo (for testing purposes)
-        img_urls = get_urls(client, keys)
-    else:
-        ## for prod
-        img_urls = []
+    if os.environ["ENV"]=="prod":
         # trigger BE API
         send_info_back_to_BE(
             product_id,
+            background_id,
             composite_id, 
             keys
         )
+    img_urls = get_urls(client, keys)
 
-    return {'generatedImages': img_urls}
-
-###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---###---
-### util functions
+    return img_urls
 
 def img2img_main(
     model,
@@ -149,12 +165,14 @@ def get_raw_generation(gr, prompt, image_with_alpha_transparency, init_image_mas
         
     return curr_image
 
-def send_info_back_to_BE(product_id, composite_id, keys):
+def send_info_back_to_BE(product_id, background_id, composite_id, keys):
+    keys = [i.split("/")[-1] for i in keys]
     body = {
     "productId": product_id,
-    "preprocessedImageKey": preprocessed_image_path,
-    "CroppedImageKey": cropped_image_path
+    "compositeProductId": composite_id,
+    "generativeImageKeys": keys
     }
-    endpoint = ""
-    requests.post()
+    endpoint = os.environ["ENDPOINT"] + "product/" + product_id + "/product-background/" + background_id + "/composite-product/" + composite_id + "/generative-product"
+    headers = {'content-type': 'application/json'}
+    requests.post(endpoint, headers=headers, json=body)
     return None

@@ -2,8 +2,11 @@ import boto3
 from PIL import Image
 from io import BytesIO
 import requests
+from handlers import validate_input_image
 
+BUCKET_NAME = 'fotomaker-engineering'
 
+@validate_input_image
 def load_image_from_url(url):
     # send a GET request to the URL and read the image contents into memory
     response = requests.get(url)
@@ -32,16 +35,16 @@ def create_s3_client(access_key, secret_key):
 #     composite_image, bg_image = Image.open(composite_image+".png"), Image.open(bg_image+".png")
 #     return s3_client, composite_image, bg_image
 
-def download_file(client, path, bucket_name='fotomaker'):
+def download_file(client, path, bucket_name=BUCKET_NAME):
     client.download_file(bucket_name, path, path.split("/")[-1])
     return None
 
 def save_images(save_name, imgs, client):
-    path_exists, start_i = check_path_exists(client, save_name)
+    # path_exists, start_i = check_path_exists(client, save_name)
     
     keys = []
     for idx, img in enumerate(imgs):
-        key = f"GeneratedImages/{save_name}/{start_i+idx}.png"
+        key = f"generative-products/{save_name}_{str(idx)}.png"
         save_response_s3(
             client,
             img,
@@ -52,7 +55,7 @@ def save_images(save_name, imgs, client):
 
 def check_path_exists(client, folder_name):
     count_objs = client.list_objects_v2(
-        Bucket='fotomaker',
+        Bucket=BUCKET_NAME,
         Prefix="GeneratedImages/"+folder_name)['KeyCount']
     if count_objs==0:
         return False, 1
@@ -64,7 +67,7 @@ def save_response_s3(client, file, key):
     file.save(in_mem_file, format="PNG")
     in_mem_file.seek(0)
     
-    client.upload_fileobj(in_mem_file, 'fotomaker', key)
+    client.upload_fileobj(in_mem_file, BUCKET_NAME, key)
     return None
 
 def get_urls(client, keys):
@@ -78,6 +81,6 @@ def create_presigned_url(client, key, expiration=60*5):
     # Generate a presigned URL for the S3 object
     response = client.generate_presigned_url(
         'get_object',
-        Params={'Bucket': 'fotomaker','Key': key},
+        Params={'Bucket': BUCKET_NAME,'Key': key},
         ExpiresIn=expiration)
     return response
