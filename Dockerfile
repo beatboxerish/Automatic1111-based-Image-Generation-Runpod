@@ -3,6 +3,7 @@ FROM ishannangia/image_generation_base:0
 WORKDIR /invokeai
 
 ADD handler.py .
+ADD exceptions.py .
 ADD app.py .
 ADD handlers.py .
 ADD s3_utils.py .
